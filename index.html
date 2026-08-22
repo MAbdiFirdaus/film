@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CineLog - Film Journal & Portfolio</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        body { background-color: #14181c; color: #9ab; }
+        .card-hover:hover { transform: translateY(-4px); transition: all 0.2s ease; }
+    </style>
+</head>
+<body class="font-sans min-h-screen flex flex-col">
+
+    <!-- Header Navigation -->
+    <header class="bg-[#182026] border-b border-gray-800 sticky top-0 z-40">
+        <div class="max-w-6xl mx-auto px-4 py-4 flex flex-col md:flex-row justify-between items-center gap-4">
+            <div class="flex items-center space-x-2">
+                <i class="fa-solid fa-film text-green-500 text-2xl"></i>
+                <h1 class="text-2xl font-bold text-white tracking-wider">CineLog</h1>
+            </div>
+            <div class="flex items-center gap-4 w-full md:w-auto">
+                <input type="text" id="searchInput" placeholder="Cari film..." 
+                       class="bg-[#2c3440] text-white px-4 py-2 rounded-full focus:outline-none focus:ring-2 focus:ring-green-500 w-full md:w-64 text-sm">
+                <select id="genreFilter" class="bg-[#2c3440] text-white px-3 py-2 rounded-lg text-sm focus:outline-none">
+                    <option value="">Semua Genre</option>
+                </select>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="max-w-6xl mx-auto px-4 py-8 flex-grow">
+        <div class="flex justify-between items-center mb-6">
+            <h2 id="sectionTitle" class="text-xl font-semibold text-white tracking-wide uppercase text-sm border-b-2 border-green-500 pb-1">Film Populer</h2>
+            <button id="viewWatchlistBtn" class="text-sm bg-[#2c3440] hover:bg-green-600 text-white px-4 py-2 rounded-md transition">
+                <i class="fa-solid fa-bookmark mr-1"></i> Watchlist (<span id="watchlistCount">0</span>)
+            </button>
+        </div>
+
+        <div id="movieGrid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6"></div>
+    </main>
+
+    <!-- Film Detail Modal -->
+    <div id="movieModal" class="fixed inset-0 bg-black/80 hidden items-center justify-center p-4 z-50 backdrop-blur-sm">
+        <div class="bg-[#182026] text-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto relative border border-gray-700 p-6">
+            <button id="closeModal" class="absolute top-4 right-4 text-gray-400 hover:text-white text-xl">&times;</button>
+            <div id="modalContent" class="space-y-4"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_KEY = '3fd2be6f0c70a2a598f084dd23308883'; // Demo TMDb API Key
+        const BASE_URL = 'https://api.themoviedb.org/3';
+        const IMAGE_BASE_URL = 'https://image.tmdb.org/t/p/w500';
+
+        let watchlist = JSON.parse(localStorage.getItem('watchlist')) || [];
+
+        // App Initialization
+        document.addEventListener('DOMContentLoaded', () => {
+            fetchGenres();
+            fetchMovies(`${BASE_URL}/movie/popular?api_key=${API_KEY}`);
+            updateWatchlistCount();
+
+            // Event Listeners
+            document.getElementById('searchInput').addEventListener('input', debounce(handleSearch, 500));
+            document.getElementById('genreFilter').addEventListener('change', handleGenreFilter);
+            document.getElementById('closeModal').addEventListener('click', closeModal);
+            document.getElementById('viewWatchlistBtn').addEventListener('click', renderWatchlist);
+        });
+
+        // Utility: Debouncing for Performance
+        function debounce(func, delay) {
+            let timeout;
+            return (...args) => {
+                clearTimeout(timeout);
+                timeout = setTimeout(() => func(...args), delay);
+            };
+        }
+
+        // Fetch Movies from TMDB
+        async function fetchMovies(url) {
+            try {
+                const res = await fetch(url);
+                const data = await res.json();
+                renderMovies(data.results);
+            } catch (error) {
+                console.error('Error fetching movies:', error);
+            }
+        }
+
+        // Fetch Genres for Filter
+        async function fetchGenres() {
+            const res = await fetch(`${BASE_URL}/genre/movie/list?api_key=${API_KEY}`);
+            const data = await res.json();
+            const select = document.getElementById('genreFilter');
+            data.genres.forEach(g => {
+                select.innerHTML += `<option value="${g.id}">${g.name}</option>`;
+            });
+        }
+
+        // Render Movie Grid
+        function renderMovies(movies) {
+            const grid = document.getElementById('movieGrid');
+            grid.innerHTML = '';
+            if(!movies || movies.length === 0) {
+                grid.innerHTML = `<p class="col-span-full text-center py-10">Film tidak ditemukan.</p>`;
+                return;
+            }
+
+            movies.forEach(movie => {
+                const poster = movie.poster_path ? IMAGE_BASE_URL + movie.poster_path : 'https://via.placeholder.com/500x750?text=No+Cover';
+                const card = document.createElement('div');
+                card.className = 'card-hover cursor-pointer group bg-[#1e262c] rounded-lg overflow-hidden border border-gray-800 flex flex-col';
+                card.innerHTML = `
+                    <div class="relative overflow-hidden">
+                        <img src="${poster}" alt="${movie.title}" class="w-full h-64 object-cover">
+                        <div class="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition">
+                            <span class="text-sm bg-green-500 text-black font-bold px-3 py-1 rounded-full">Lihat Detail</span>
+                        </div>
+                    </div>
+                    <div class="p-3 flex flex-col justify-between flex-grow">
+                        <h3 class="font-bold text-white text-sm truncate">${movie.title}</h3>
+                        <div class="flex justify-between items-center mt-2 text-xs text-gray-400">
+                            <span><i class="fa-solid fa-star text-yellow-500 mr-1"></i>${movie.vote_average.toFixed(1)}</span>
+                            <span>${movie.release_date ? movie.release_date.split('-')[0] : 'N/A'}</span>
+                        </div>
+                    </div>
+                `;
+                card.addEventListener('click', () => openMovieModal(movie.id));
+                grid.appendChild(card);
+            });
+        }
+
+        // Handle Live Search
+        function handleSearch(e) {
+            const query = e.target.value.trim();
+            if (query.length > 2) {
+                document.getElementById('sectionTitle').innerText = `Hasil Pencarian: "${query}"`;
+                fetchMovies(`${BASE_URL}/search/movie?api_key=${API_KEY}&query=${encodeURIComponent(query)}`);
+            } else if (query === '') {
+                document.getElementById('sectionTitle').innerText = 'Film Populer';
+                fetchMovies(`${BASE_URL}/movie/popular?api_key=${API_KEY}`);
+            }
+        }
+
+        // Handle Genre Filter
+        function handleGenreFilter(e) {
+            const genreId = e.target.value;
+            if (genreId) {
+                document.getElementById('sectionTitle').innerText = 'Filtered by Genre';
+                fetchMovies(`${BASE_URL}/discover/movie?api_key=${API_KEY}&with_genres=${genreId}`);
+            } else {
+                fetchMovies(`${BASE_URL}/movie/popular?api_key=${API_KEY}`);
+            }
+        }
+
+        // Modal Component with Multiple API Calls (Promise.all)
+        async function openMovieModal(movieId) {
+            const modal = document.getElementById('movieModal');
+            const content = document.getElementById('modalContent');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            content.innerHTML = '<p class="text-center py-8">Memuat data film...</p>';
+
+            try {
+                const [detailsRes, videosRes] = await Promise.all([
+                    fetch(`${BASE_URL}/movie/${movieId}?api_key=${API_KEY}`),
+                    fetch(`${BASE_URL}/movie/${movieId}/videos?api_key=${API_KEY}`)
+                ]);
+
+                const movie = await detailsRes.json();
+                const videos = await videosRes.json();
+                const trailer = videos.results.find(v => v.type === 'Trailer');
+
+                const isSaved = watchlist.some(item => item.id === movie.id);
+
+                content.innerHTML = `
+                    <div class="flex flex-col md:flex-row gap-6">
+                        <img src="${IMAGE_BASE_URL + movie.poster_path}" class="w-full md:w-48 rounded-lg object-cover">
+                        <div class="space-y-3 flex-1">
+                            <h2 class="text-2xl font-bold text-white">${movie.title} (${movie.release_date.split('-')[0]})</h2>
+                            <div class="flex items-center gap-2 text-sm text-gray-400">
+                                <span><i class="fa-solid fa-star text-yellow-500"></i> ${movie.vote_average.toFixed(1)}</span> |
+                                <span>${movie.runtime} Menit</span> |
+                                <span>${movie.genres.map(g => g.name).join(', ')}</span>
+                            </div>
+                            <p class="text-sm text-gray-300 leading-relaxed">${movie.overview}</p>
+                            <button id="toggleWatchlistBtn" class="mt-4 px-4 py-2 rounded-lg font-bold text-sm ${isSaved ? 'bg-red-600' : 'bg-green-500 text-black'} hover:opacity-90 transition">
+                                ${isSaved ? 'Hapus dari Watchlist' : '+ Tambah ke Watchlist'}
+                            </button>
+                        </div>
+                    </div>
+                    ${trailer ? `
+                        <div class="mt-6 border-t border-gray-800 pt-4">
+                            <h4 class="font-bold text-sm mb-2 text-white">Trailer Resmi</h4>
+                            <div class="aspect-video w-full">
+                                <iframe class="w-full h-full rounded-lg" src="https://www.youtube.com/embed/${trailer.key}" frameborder="0" allowfullscreen></iframe>
+                            </div>
+                        </div>
+                    ` : ''}
+                `;
+
+                document.getElementById('toggleWatchlistBtn').addEventListener('click', () => toggleWatchlist(movie));
+
+            } catch (err) {
+                content.innerHTML = '<p class="text-red-500">Gagal memuat detail film.</p>';
+            }
+        }
+
+        function closeModal() {
+            const modal = document.getElementById('movieModal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+            document.getElementById('modalContent').innerHTML = '';
+        }
+
+        // Local Storage Watchlist Logic
+        function toggleWatchlist(movie) {
+            const index = watchlist.findIndex(item => item.id === movie.id);
+            if (index > -1) {
+                watchlist.splice(index, 1);
+            } else {
+                watchlist.push({
+                    id: movie.id,
+                    title: movie.title,
+                    poster_path: movie.poster_path,
+                    vote_average: movie.vote_average,
+                    release_date: movie.release_date
+                });
+            }
+            localStorage.setItem('watchlist', JSON.stringify(watchlist));
+            updateWatchlistCount();
+            closeModal();
+        }
+
+        function updateWatchlistCount() {
+            document.getElementById('watchlistCount').innerText = watchlist.length;
+        }
+
+        function renderWatchlist() {
+            document.getElementById('sectionTitle').innerText = 'Watchlist Saya';
+            renderMovies(watchlist);
+        }
+    </script>
+</body>
+</html>
